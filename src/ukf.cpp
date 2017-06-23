@@ -57,9 +57,6 @@ UKF::UKF() {
 
   // Augmented state dimension
   n_aug_ = 7;
-
-  // Measurement dimension: radar measures r, phi, r_dot
-  n_z_ = 3;
   
   // Sigma point spreading parameter
   lambda_ = 3 - n_aug_;
@@ -92,6 +89,8 @@ void UKF::ProcessMeasurement(MeasurementPackage meas_package) {
   /*****************************************************************************
   *  Initialization
   ****************************************************************************/
+  long previous_timestamp;
+
   if (!is_initialized_) {
     // first measurement
     cout << "UKF: " << endl;
@@ -117,7 +116,7 @@ void UKF::ProcessMeasurement(MeasurementPackage meas_package) {
     }
 
     // done initializing
-    previous_timestamp_ = meas_package.timestamp_;
+    previous_timestamp = meas_package.timestamp_;
     is_initialized_ = true;
     return;
   }
@@ -125,7 +124,7 @@ void UKF::ProcessMeasurement(MeasurementPackage meas_package) {
   /*****************************************************************************
   *  Prediction & Update
   ****************************************************************************/
-  float delta_t = (meas_package.timestamp_ - previous_timestamp_) / 1000000.0; //in secs
+  float delta_t = (meas_package.timestamp_ - previous_timestamp) / 1000000.0; //in secs
   Prediction(delta_t);
 
   if (meas_package.sensor_type_ == MeasurementPackage::RADAR) {
@@ -137,7 +136,7 @@ void UKF::ProcessMeasurement(MeasurementPackage meas_package) {
     UpdateLidar(meas_package);
   }
 
-  previous_timestamp_ = meas_package.timestamp_;
+  previous_timestamp = meas_package.timestamp_;
 }
 
 /**
@@ -291,13 +290,13 @@ void UKF::UpdateLidar(MeasurementPackage meas_package) {
       0, 1, 0, 0, 0;
 
   //measurement covariance matrix - laser
-  R = MatrixXd(2, 2);
+  MatrixXd R = MatrixXd(2, 2);
   R << std_laspx_*std_laspx_, 0, 
       0, std_laspy_*std_laspy_;
 
   VectorXd y = z - H * x_;
   MatrixXd Ht = H.transpose();
-  MatrixXd S = H * P_ * Ht + R_;
+  MatrixXd S = H * P_ * Ht + R;
   MatrixXd Si = S.inverse();
   MatrixXd K = P_ * Ht * Si;
 
@@ -327,11 +326,14 @@ void UKF::UpdateRadar(MeasurementPackage meas_package) {
   *  Predict Radar Sigma Points
   ****************************************************************************/
 
+  // Measurement dimension: radar measures r, phi, r_dot
+  int n_z = 3;
+
   //create matrix for sigma points in measurement space
-  MatrixXd Zsig = MatrixXd(n_z_, 2*n_aug_+1);
+  MatrixXd Zsig = MatrixXd(n_z, 2*n_aug_+1);
 
   //mean predicted measurement
-  VectorXd z_pred = VectorXd(n_z_);
+  VectorXd z_pred = VectorXd(n_z);
   
   //measurement covariance matrix S
   MatrixXd S = MatrixXd(n_z,n_z);
@@ -369,7 +371,7 @@ void UKF::UpdateRadar(MeasurementPackage meas_package) {
     S += weights_(i) * z_diff * z_diff.transpose();
   }
 
-  MatrixXd R = MatrixXd(n_z_,n_z_);
+  MatrixXd R = MatrixXd(n_z,n_z);
   R(0,0) = std_radr_*std_radr_;
   R(1,1) = std_radphi_*std_radphi_;
   R(2,2) = std_radrd_*std_radrd_;
@@ -384,7 +386,7 @@ void UKF::UpdateRadar(MeasurementPackage meas_package) {
   VectorXd z = meas_package.raw_measurements_;
 
   //create matrix for cross correlation Tc
-  MatrixXd Tc = MatrixXd(n_x_, n_z_);
+  MatrixXd Tc = MatrixXd(n_x_, n_z);
 
   //calculate cross correlation matrix
   Tc.fill(0.0);
