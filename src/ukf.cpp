@@ -106,6 +106,7 @@ void UKF::ProcessMeasurement(MeasurementPackage meas_package) {
 
       x_(0) = rho * cos(phi);
       x_(1) = rho * sin(phi);
+      cout << "x_: " << x_ << endl;
     }
     else if (meas_package.sensor_type_ == MeasurementPackage::LASER) {
       /**
@@ -113,10 +114,12 @@ void UKF::ProcessMeasurement(MeasurementPackage meas_package) {
       */
       x_(0) = meas_package.raw_measurements_[0];
       x_(1) = meas_package.raw_measurements_[1];
+      cout << "x_: " << x_ << endl;
     }
 
     // done initializing
     previous_timestamp = meas_package.timestamp_;
+    cout << "previous_timestamp: " << previous_timestamp << endl;
     is_initialized_ = true;
     return;
   }
@@ -125,6 +128,7 @@ void UKF::ProcessMeasurement(MeasurementPackage meas_package) {
   *  Prediction & Update
   ****************************************************************************/
   float delta_t = (meas_package.timestamp_ - previous_timestamp) / 1000000.0; //in secs
+  cout << "delta_t: " << delta_t << endl;
   Prediction(delta_t);
 
   if (meas_package.sensor_type_ == MeasurementPackage::RADAR) {
@@ -219,7 +223,7 @@ void UKF::Prediction(double delta_t) {
         delta_t * nu_yawdd;
     
     //avoid division by zero
-    if (fabs(yawd) <= 0.001) {
+    if (fabs(yawd) < 0.0001) {
       
       //std::cout << "Div by zero:" << std::endl << Xsig_aug.col(i) << std::endl;
       preds << v * cos(yaw) * delta_t,
@@ -262,6 +266,8 @@ void UKF::Prediction(double delta_t) {
 
     P_ += weights_(i) * x_diff * x_diff.transpose();
   }
+  cout << "x_: " << x_ << endl;
+  cout << "P_: " << P_ << endl;
 }
 
 /**
@@ -306,7 +312,9 @@ void UKF::UpdateLidar(MeasurementPackage meas_package) {
   P_ = (I - (K * H)) * P_;
 
   //calculate Normalized Innovation Square (NIS)
-  double NIS = y.transpose() * Si * y;
+  //double NIS = y.transpose() * Si * y;
+  cout << "Lidar update, x_: " << x_ << endl;
+  cout << "Lidar update, P_: " << P_ << endl;
 }
 
 /**
@@ -346,6 +354,14 @@ void UKF::UpdateRadar(MeasurementPackage meas_package) {
     double v = Xsig_pred_(2,i);
     double yaw = Xsig_pred_(3,i);
     double yawd = Xsig_pred_(4,i);
+
+    float zero_check = 0.0001;
+    if (fabs(p_x)<0.0001) {
+      if (fabs(p_y)<0.0001) {
+        p_y = zero_check;
+      }
+      p_x = zero_check;
+    }
 
     //measurement model
     Zsig(0,i) = sqrt(p_x*p_x + p_y*p_y);  //r
@@ -420,5 +436,7 @@ void UKF::UpdateRadar(MeasurementPackage meas_package) {
   P_ = P_ - K * S * K.transpose();
 
   //calculate Normalized Innovation Square (NIS)
-  double NIS = z_diff.transpose() * S.inverse() * z_diff;
+  //double NIS = z_diff.transpose() * S.inverse() * z_diff;
+  cout << "Radar update, x_: " << x_ << endl;
+  cout << "Radar update, P_: " << P_ << endl;
 }
