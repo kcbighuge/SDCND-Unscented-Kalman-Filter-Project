@@ -95,7 +95,7 @@ void UKF::ProcessMeasurement(MeasurementPackage meas_package) {
   if (!is_initialized_) {
     // first measurement
     cout << "UKF: " << endl;
-    x_.fill(0.0);  // values are important to RMSE
+    x_.fill(0);  // values are important to RMSE
     P_ = MatrixXd::Identity(n_x_, n_x_);
 
     if (meas_package.sensor_type_ == MeasurementPackage::RADAR) {
@@ -122,7 +122,6 @@ void UKF::ProcessMeasurement(MeasurementPackage meas_package) {
 
     // done initializing
     time_us_ = meas_package.timestamp_;
-    cout << "time_us_: " << time_us_ << endl;
     is_initialized_ = true;
     return;
   }
@@ -131,8 +130,7 @@ void UKF::ProcessMeasurement(MeasurementPackage meas_package) {
   *  Prediction & Update
   ****************************************************************************/
 
-  float dt = (meas_package.timestamp_ - time_us_) / 1000000.0; //in secs
-  cout << "dt: " << dt << endl;
+  float dt = (meas_package.timestamp_ - time_us_) / 1000000.0;  //in secs
   time_us_ = meas_package.timestamp_;
   Prediction(dt);
 
@@ -174,15 +172,14 @@ void UKF::Prediction(double delta_t) {
   MatrixXd Xsig_aug = MatrixXd(n_aug_, 2*n_aug_ + 1);
 
   //create augmented mean state
+  x_aug.fill(0.0);
   x_aug.head(n_x_) = x_;
-  x_aug(n_aug_-2) = 0;
-  x_aug(n_aug_-1) = 0;
 
   //create augmented covariance matrix
   P_aug.fill(0.0);
   P_aug.topLeftCorner(n_x_,n_x_) = P_;
-  P_aug(n_aug_-2, n_aug_-2) = pow(std_a_, 2);
-  P_aug(n_aug_-1, n_aug_-1) = pow(std_yawdd_ ,2);
+  P_aug(5,5) = std_a_ * std_a_;
+  P_aug(6,6) = std_yawdd_ * std_yawdd_;
 
   //create square root matrix
   MatrixXd A_aug = P_aug.llt().matrixL();
@@ -205,14 +202,11 @@ void UKF::Prediction(double delta_t) {
   *  Predict Sigma Points
   ****************************************************************************/
 
-  //placeholder for sigma points predictions
-  VectorXd noise = VectorXd(n_x_);
-  VectorXd preds = VectorXd(n_x_);
-
   //loop through sigma points columns
   for (int i=0; i<(2*n_aug_+1); i++) {
 
     // assign values
+    double dt2 = delta_t * delta_t;
     double p_x = Xsig_aug(0,i);
     double p_y = Xsig_aug(1,i);
     double v = Xsig_aug(2,i);
@@ -221,33 +215,39 @@ void UKF::Prediction(double delta_t) {
     double nu_a = Xsig_aug(5,i);
     double nu_yawdd = Xsig_aug(6,i);
 
-    noise << 0.5 * pow(delta_t,2) * cos(yaw) * nu_a,
-        0.5 * pow(delta_t,2) * sin(yaw) * nu_a,
-        delta_t * nu_a,
-        0.5 * pow(delta_t,2) * nu_yawdd,
-        delta_t * nu_yawdd;
+    //predicted state values
+    double px_p, py_p;
     
     //avoid division by zero
-    if (fabs(yawd) < 0.0001) {
+    if (fabs(yawd) < 0.001) {
       
-      //std::cout << "Div by zero:" << std::endl << Xsig_aug.col(i) << std::endl;
-      preds << v * cos(yaw) * delta_t,
-          v * sin(yaw) * delta_t,
-          0, yawd*delta_t, 0;
-
-      preds = Xsig_aug.block(0,i, 5,1) + preds + noise;
+      px_p = p_x + v*delta_t*cos(yaw);
+      py_p = p_y + v*delta_t*sin(yaw);
 
     } else {
 
-      preds << (v/yawd) * ( sin(yaw + yawd*delta_t) - sin(yaw) ),
-          (v/yawd) * ( -cos(yaw + yawd*delta_t) + cos(yaw) ),
-          0, yawd*delta_t, 0;
+      px_p = p_x + v/yawd * ( sin (yaw + yawd*delta_t) - sin(yaw));
+      py_p = p_y + v/yawd * ( cos(yaw) - cos(yaw+yawd*delta_t) );
 
-      preds = Xsig_aug.block(0,i, 5,1) + preds + noise;
     }
     
+    double v_p = v;
+    double yaw_p = yaw + yawd*delta_t;
+    double yawd_p = yawd;
+
+    //add noise
+    px_p = px_p + 0.5*nu_a*dt2 * cos(yaw);
+    py_p = py_p + 0.5*nu_a*dt2 * sin(yaw);
+    v_p = v_p + nu_a*delta_t;
+    yaw_p = yaw_p + 0.5*nu_yawdd*dt2;
+    yawd_p = yawd_p + nu_yawdd*delta_t;
+
     //write predicted sigma points into right column
-    Xsig_pred_.col(i) = preds;
+    Xsig_pred_(0,i) = px_p;
+    Xsig_pred_(1,i) = py_p;
+    Xsig_pred_(2,i) = v_p;
+    Xsig_pred_(3,i) = yaw_p;
+    Xsig_pred_(4,i) = yawd_p;
   }
 
   /*****************************************************************************
@@ -357,9 +357,9 @@ void UKF::UpdateRadar(MeasurementPackage meas_package) {
     double yaw = Xsig_pred_(3,i);
     double yawd = Xsig_pred_(4,i);
 
-    float zero_check = 0.0001;
-    if (fabs(p_x)<0.0001) {
-      if (fabs(p_y)<0.0001) {
+    float zero_check = 0.001;
+    if (fabs(p_x)<0.001) {
+      if (fabs(p_y)<0.001) {
         p_y = zero_check;
       }
       p_x = zero_check;
