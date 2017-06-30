@@ -1,6 +1,7 @@
 #include "ukf.h"
 #include "Eigen/Dense"
 #include <iostream>
+#include "tools.h"
 
 using namespace std;
 using Eigen::MatrixXd;
@@ -202,14 +203,14 @@ void UKF::Prediction(double delta_t) {
   for (int i=0; i<(2*n_aug_+1); i++) {
 
     // assign values
-    double dt2 = delta_t * delta_t;
-    double p_x = Xsig_aug(0,i);
-    double p_y = Xsig_aug(1,i);
-    double v = Xsig_aug(2,i);
-    double yaw = Xsig_aug(3,i);
-    double yawd = Xsig_aug(4,i);
-    double nu_a = Xsig_aug(5,i);
-    double nu_yawdd = Xsig_aug(6,i);
+    const double dt2 = delta_t * delta_t;
+    const double p_x = Xsig_aug(0,i);
+    const double p_y = Xsig_aug(1,i);
+    const double v = Xsig_aug(2,i);
+    const double yaw = Xsig_aug(3,i);
+    const double yawd = Xsig_aug(4,i);
+    const double nu_a = Xsig_aug(5,i);
+    const double nu_yawdd = Xsig_aug(6,i);
 
     //predicted state values
     double px_p, py_p;
@@ -305,8 +306,9 @@ void UKF::UpdateLidar(MeasurementPackage meas_package) {
 
   //new state
   x_ = x_ + (K * y);
-  MatrixXd I = MatrixXd::Identity(n_x_, n_x_);
-  P_ = (I - (K * H)) * P_;
+  //MatrixXd I = MatrixXd::Identity(n_x_, n_x_);
+  //P_ = (I - (K * H)) * P_;
+  P_ -= K * H * P_;
 
   //calculate Normalized Innovation Square (NIS)
   //double NIS = y.transpose() * Si * y;
@@ -377,14 +379,15 @@ void UKF::UpdateRadar(MeasurementPackage meas_package) {
     VectorXd z_diff = Zsig.col(i) - z_pred;  //residual
 
     //angle normalization
-    z_diff(1) = Normalize(z_diff(1));
+    //z_diff(1) = Normalize(z_diff(1));
+    normalize(z_diff(1));
 
     S += weights_(i) * z_diff * z_diff.transpose();
   }
   
   //add measurement noise covariance matrix
-  MatrixXd R = MatrixXd(n_z,n_z);
-  R.fill(0);
+  MatrixXd R = MatrixXd::Zero(n_z,n_z);
+  //R.fill(0);
   R(0,0) = std_radr_*std_radr_;
   R(1,1) = std_radphi_*std_radphi_;
   R(2,2) = std_radrd_*std_radrd_;
@@ -404,12 +407,14 @@ void UKF::UpdateRadar(MeasurementPackage meas_package) {
     VectorXd z_diff = Zsig.col(i) - z_pred;  //residual
     
     //angle normalization
-    z_diff(1) = Normalize(z_diff(1));
+    //z_diff(1) = Normalize(z_diff(1));
+    normalize(z_diff(1));
 
     VectorXd x_diff = Xsig_pred_.col(i) - x_;  // state difference
     
     //angle normalization
-    x_diff(3) = Normalize(x_diff(3));
+    //x_diff(3) = Normalize(x_diff(3));
+    normalize(x_diff(3));
 
     Tc += weights_(i) * x_diff * z_diff.transpose();
   }
@@ -422,7 +427,8 @@ void UKF::UpdateRadar(MeasurementPackage meas_package) {
   //cout << "radar pred: " << endl << z_pred << endl;
 
   //angle normalization
-  z_diff(1) = Normalize(z_diff(1));
+  //z_diff(1) = Normalize(z_diff(1));
+  normalize(z_diff(1));
 
   //update state mean and covariance matrix
   x_ += K * z_diff;
@@ -442,4 +448,8 @@ double UKF::Normalize(double x) {
     x -= 2.0 * M_PI;
 
   return x;
+}
+
+void UKF::normalize(double& phi) {
+  phi = atan2(sin(phi), cos(phi));
 }
